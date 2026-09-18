@@ -1,0 +1,17 @@
+{
+  "name": "cs-web-fps",
+  "version": "1.0.0",
+  "description": "类 Counter-Strike 的浏览器 FPS：Three.js + 原生 ES 模块，含 AI 敌人、后坐力、小地图与计分板",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "test": "node test-modules.mjs"
+  },
+  "keywords": ["fps", "threejs", "game", "counter-strike", "webgl"],
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.160.0"
+  }
+}

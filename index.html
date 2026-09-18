@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS Web FPS — Counter-Strike 风格网页射击</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: 'Segoe UI', Consolas, monospace; color: #e8e8e8; user-select: none; }
+  #app { position: relative; width: 100vw; height: 100vh; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---------- 准星 ---------- */
+  #crosshair { position: absolute; left: 50%; top: 50%; pointer-events: none; transform: translate(-50%, -50%); }
+  #crosshair div { position: absolute; background: #35ff6a; box-shadow: 0 0 2px #000; }
+  #ch-t { width: 2px; height: 8px; left: -1px; top: -14px; }
+  #ch-b { width: 2px; height: 8px; left: -1px; top: 6px; }
+  #ch-l { width: 8px; height: 2px; left: -14px; top: -1px; }
+  #ch-r { width: 8px; height: 2px; left: 6px; top: -1px; }
+  #ch-dot { width: 2px; height: 2px; left: -1px; top: -1px; opacity: .9; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; }
+  #bottom-left { position: absolute; left: 24px; bottom: 20px; }
+  #hp-row { display: flex; align-items: baseline; gap: 8px; }
+  #hp { font-size: 42px; font-weight: 700; color: #fff; text-shadow: 0 2px 6px #000; line-height: 1; }
+  #hp.low { color: #ff4d4d; }
+  .label { font-size: 12px; letter-spacing: 2px; color: #9aa; text-transform: uppercase; }
+  #armor-row { margin-top: 2px; display: flex; align-items: baseline; gap: 6px; }
+  #armor { font-size: 20px; font-weight: 600; color: #7ec8ff; }
+
+  #bottom-right { position: absolute; right: 24px; bottom: 20px; text-align: right; }
+  #ammo { font-size: 42px; font-weight: 700; color: #fff; text-shadow: 0 2px 6px #000; line-height: 1; }
+  #ammo-reserve { font-size: 22px; color: #9aa; margin-left: 6px; }
+  #weapon-name { font-size: 13px; letter-spacing: 2px; color: #cfd; margin-top: 4px; }
+
+  #top-center { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #score { font-size: 26px; font-weight: 700; text-shadow: 0 2px 6px #000; }
+  #score .ct { color: #7ec8ff; }
+  #score .t { color: #ffcf6a; }
+  #score .vs { color: #667; margin: 0 10px; font-size: 20px; }
+  #timer { font-size: 15px; color: #cde; margin-top: 2px; letter-spacing: 1px; }
+
+  #killfeed { position: absolute; right: 18px; top: 70px; text-align: right; font-size: 13px; }
+  #killfeed div { background: rgba(0,0,0,.45); padding: 3px 8px; margin-bottom: 3px; border-radius: 3px; display: inline-block; }
+  #killfeed .k { color: #35ff6a; font-weight: 700; }
+  #killfeed .v { color: #ff6a6a; }
+
+  /* ---------- 小地图 ---------- */
+  #minimap-wrap { position: absolute; left: 18px; top: 18px; width: 190px; height: 190px; background: rgba(8,14,12,.72); border: 1px solid rgba(53,255,106,.35); border-radius: 4px; overflow: hidden; }
+  #minimap { display: block; width: 190px; height: 190px; }
+  #minimap-label { position: absolute; left: 6px; bottom: 3px; font-size: 10px; color: rgba(53,255,106,.6); letter-spacing: 1px; }
+
+  /* ---------- 受伤/命中反馈 ---------- */
+  #damage-flash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(255,0,0,0) 40%, rgba(255,0,0,.55) 100%); opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; pointer-events: none; }
+  #hitmarker div { position: absolute; background: #fff; }
+  #hitmarker .h { width: 10px; height: 2px; }
+  #hitmarker .v { width: 2px; height: 10px; }
+
+  /* ---------- 覆盖层 ---------- */
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4,8,6,.88); backdrop-filter: blur(6px); z-index: 30; }
+  .overlay.hidden { display: none; }
+  .panel { text-align: center; max-width: 620px; padding: 36px 44px; }
+  .panel h1 { font-size: 40px; letter-spacing: 3px; margin-bottom: 6px; color: #fff; }
+  .panel h1 span { color: #35ff6a; }
+  .panel .sub { color: #8a9; font-size: 14px; margin-bottom: 26px; letter-spacing: 1px; }
+  .keys { display: grid; grid-template-columns: auto auto; gap: 8px 26px; text-align: left; font-size: 14px; margin: 0 auto 28px; width: fit-content; }
+  .keys b { color: #35ff6a; font-weight: 600; }
+  .keys span { color: #bcd; }
+  .btn { pointer-events: auto; cursor: pointer; display: inline-block; padding: 13px 42px; background: #35ff6a; color: #04120a; font-weight: 700; font-size: 16px; letter-spacing: 2px; border: none; border-radius: 3px; transition: transform .12s, box-shadow .12s; }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(53,255,106,.4); }
+  .btn.secondary { background: transparent; color: #9ab; border: 1px solid #475; margin-left: 10px; }
+  #death-screen .panel h1 { color: #ff5252; }
+  #win-screen .panel h1 { color: #7ec8ff; }
+  .stats { color: #9ab; font-size: 15px; margin-bottom: 24px; line-height: 1.8; }
+  .stats b { color: #fff; }
+
+  /* ---------- 换弹提示 ---------- */
+  #reload-hint { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-size: 15px; color: #ffcf6a; letter-spacing: 2px; opacity: 0; transition: opacity .2s; }
+  #hit-dir { position: absolute; inset: 0; pointer-events: none; }
+  .hit-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; font-size: 30px; color: #ff4d4d; opacity: .85; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="crosshair">
+    <div id="ch-t"></div><div id="ch-b"></div><div id="ch-l"></div><div id="ch-r"></div><div id="ch-dot"></div>
+  </div>
+
+  <div id="hit-dir"></div>
+  <div id="damage-flash"></div>
+  <div id="hitmarker">
+    <div class="h" style="left:-5px;top:-1px"></div>
+    <div class="h" style="left:-5px;top:-1px;transform:rotate(90deg)"></div>
+  </div>
+
+  <div id="hud">
+    <div id="minimap-wrap">
+      <canvas id="minimap" width="380" height="380"></canvas>
+      <div id="minimap-label">RADAR</div>
+    </div>
+
+    <div id="top-center">
+      <div id="score">
+        <span class="ct" id="score-ct">0</span>
+        <span class="vs">:</span>
+        <span class="t" id="score-t">0</span>
+      </div>
+      <div id="timer">回合进行中</div>
+    </div>
+
+    <div id="killfeed"></div>
+
+    <div id="bottom-left">
+      <div id="hp-row"><span class="label">HP</span><span id="hp">100</span></div>
+      <div id="armor-row"><span class="label">AP</span><span id="armor">0</span></div>
+    </div>
+
+    <div id="bottom-right">
+      <div><span id="ammo">30</span><span id="ammo-reserve">/ 90</span></div>
+      <div id="weapon-name">AK-47</div>
+    </div>
+
+    <div id="reload-hint">按 R 换弹</div>
+  </div>
+
+  <div id="start-screen" class="overlay">
+    <div class="panel">
+      <h1>CS <span>WEB</span> FPS</h1>
+      <div class="sub">Counter-Strike 风格 · 浏览器射击</div>
+      <div class="keys">
+        <b>W A S D</b><span>移动</span>
+        <b>鼠标</b><span>瞄准</span>
+        <b>左键</b><span>射击（按住连发）</span>
+        <b>R</b><span>换弹</span>
+        <b>Shift</b><span>静步（更准）</span>
+        <b>Space</b><span>跳跃</span>
+        <b>Ctrl</b><span>下蹲</span>
+        <b>Tab</b><span>计分板</span>
+        <b>Esc</b><span>暂停</span>
+      </div>
+      <button class="btn" id="btn-start">点击开始</button>
+    </div>
+  </div>
+
+  <div id="pause-screen" class="overlay hidden">
+    <div class="panel">
+      <h1>暂 停</h1>
+      <div class="sub">点击继续返回战场</div>
+      <button class="btn" id="btn-resume">继续游戏</button>
+      <button class="btn secondary" id="btn-restart-1">重新开始</button>
+    </div>
+  </div>
+
+  <div id="death-screen" class="overlay hidden">
+    <div class="panel">
+      <h1>你 被 击 杀</h1>
+      <div class="stats" id="death-stats"></div>
+      <button class="btn" id="btn-respawn">重新出生</button>
+    </div>
+  </div>
+
+  <div id="win-screen" class="overlay hidden">
+    <div class="panel">
+      <h1>回 合 胜 利</h1>
+      <div class="stats" id="win-stats"></div>
+      <button class="btn" id="btn-next">下一回合</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
